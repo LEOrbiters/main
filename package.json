@@ -1,0 +1,19 @@
+{
+  "name": "leo-orbiters-flutter",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"node main/server.js\" \"cd src1 && flutter run -d chrome\"",
+    "server": "node src1/server.js",
+    "client": "cd src1 && flutter run -d chrome",
+    "build": "node build-check.js",
+    "build:flutter": "cd src1 && flutter build web",
+    "clean": "cd src1 && flutter clean"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "concurrently": "^9.2.1"
+  }
+}
