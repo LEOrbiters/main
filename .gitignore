@@ -21,3 +21,52 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Miscellaneous
+.DS_Store
+*.pem
+*.jks
+
+# IDE-specific files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Flutter/Dart-specific
+src1/.packages
+src1/.pub-cache/
+src1/.pub/
+
+# The user-specified candidates
+src1/.dart_tool/
+src1/build/
+
+# Generated plugin registration
+src1/lib/generated_plugin_registrant.dart
+
+# Sensitive files
+src1/key.properties
+src1/local.properties
+
+# Android-specific
+src1/android/app/src/main/assets/flutter_assets/
+src1/android/app/src/main/java/io/flutter/plugins/
+src1/android/app/build/
+src1/android/.gradle/
+src1/android/key.properties
+src1/android/local.properties
+
+# iOS-specific
+src1/ios/Flutter/App.framework
+src1/ios/Flutter/engine
+src1/ios/Flutter/flutter_assets
+src1/ios/Flutter/Generated.xcconfig
+src1/ios/Flutter/flutter_export_environment.sh
+src1/ios/Pods/
+src1/ios/Runner/GeneratedPluginRegistrant.*
+src1/ios/.symlinks/
+src1/ios/Runner.xcworkspace/
+src1/ios/Runner.xcodeproj/project.xcworkspace/
+src1/ios/Runner.xcodeproj/xcuserdata/
