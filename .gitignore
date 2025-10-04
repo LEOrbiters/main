@@ -22,6 +22,11 @@ dist-ssr
 *.sw?
 .env
 
+ Python
+venv/
+__pycache__/
+*.pyc
+.env
 # Miscellaneous
 .DS_Store
 *.pem
