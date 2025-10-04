@@ -1,11 +1,12 @@
 from flask import Flask, jsonify
 from dotenv import load_dotenv
 import os
+import requests
 from datetime import datetime
 import random
 
 load_dotenv()
-
+ 
 app = Flask(__name__)
 
 def generate_random_alerts(date=None):
@@ -79,6 +80,30 @@ def get_alerts_by_date(date_str):
         'lastUpdate': last_update,
         'alerts': alerts
     })
+
+@app.route('/api/airspaces')
+def get_airspaces():
+    api_key =  "ef6956e1dfa62da0811f7f2aa1d712e8"# os.getenv('OpenAIP_API_KEY')
+    if not api_key:
+        return jsonify({'error': 'OpenAIP API key not configured on server'}), 500
+
+    url = 'https://api.core.openaip.net/api/airspaces'
+    headers = {
+        'x-openaip-api-key': api_key
+    }
+    params = {
+        'page': 1,
+        'limit': 10,
+        'sortBy': 'name',
+        'sortDesc': 'true',
+        'country': 'KR'
+    }
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+        return jsonify(response.json())
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'Failed to fetch data from OpenAIP: {e}'}), 502
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 3002))
