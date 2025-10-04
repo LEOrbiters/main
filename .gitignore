@@ -43,6 +43,8 @@ __pycache__/
 src1/.packages
 src1/.pub-cache/
 src1/.pub/
+src1/assets/.env
+src1/.flutter-plugins-dependencies
 
 # The user-specified candidates
 src1/.dart_tool/

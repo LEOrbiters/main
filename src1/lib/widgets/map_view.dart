@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../models/alert.dart';
 
 class MapView extends StatefulWidget {
@@ -28,7 +27,7 @@ class MapView extends StatefulWidget {
 }
 
 class _MapViewState extends State<MapView> {
-  final MapController _mapController = MapController();
+  GoogleMapController? _mapController;
 
   @override
   void didUpdateWidget(MapView oldWidget) {
@@ -40,9 +39,10 @@ class _MapViewState extends State<MapView> {
   }
 
   void _animateToAlert(Alert alert) {
-    _mapController.move(
-      LatLng(alert.location[0], alert.location[1]),
-      8.0,
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: LatLng(alert.location[0], alert.location[1]), zoom: 8.0),
+      ),
     );
   }
 
@@ -70,31 +70,30 @@ class _MapViewState extends State<MapView> {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        FlutterMap(
-          mapController: _mapController,
-          options: MapOptions(
-            initialCenter: const LatLng(36.5, 127.5),
-            initialZoom: 7.0,
+        GoogleMap(
+          mapType: widget.mapMode == MapMode.threeD ? MapType.satellite : MapType.normal,
+          initialCameraPosition: const CameraPosition(
+            target: LatLng(36.5, 127.5),
+            zoom: 7.0,
           ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-              subdomains: const ['a', 'b', 'c'],
-              userAgentPackageName: 'com.example.leo_orbiters',
-            ),
-            CircleLayer(
-              circles: widget.alerts.map((alert) {
-                final color = _getMarkerColor(alert.risk);
-                return CircleMarker(
-                  point: LatLng(alert.location[0], alert.location[1]),
-                  radius: 10 + alert.risk * 20,
-                  color: color.withOpacity(0.5),
-                  borderColor: color,
-                  borderStrokeWidth: 2,
-                );
-              }).toList(),
-            ),
-          ],
+          onMapCreated: (GoogleMapController controller) {
+            _mapController = controller;
+          },
+          circles: widget.alerts.map((alert) {
+            final color = _getMarkerColor(alert.risk);
+            return Circle(
+              circleId: CircleId(alert.id),
+              center: LatLng(alert.location[0], alert.location[1]),
+              radius: 10000 + alert.risk * 20000, // Radius in meters
+              fillColor: color.withOpacity(0.5),
+              strokeColor: color,
+              strokeWidth: 2,
+            );
+          }).toSet(),
+          // Disable default buttons since we have custom ones
+          myLocationButtonEnabled: false,
+          zoomControlsEnabled: false,
+          mapToolbarEnabled: false,
         ),
         Positioned(
           top: 16,

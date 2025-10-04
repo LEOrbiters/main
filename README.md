@@ -9,6 +9,7 @@ FIR-Based LEO Satellite Collision Early-Warning and Visualization System
 cd src1
 flutter pub get
 ```
+Google Map API key: src1/assets/.env REQUIRED
 
 # 서버 사이드 Python Flask 실행:
 ## Add to requirements.txt (keep editing)
