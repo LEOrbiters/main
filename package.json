@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"node main/server.js\" \"cd src1 && flutter run -d chrome\"",
+    "dev": "concurrently \"node src1/server.js\" \"npm run client\"",
     "server": "node src1/server.js",
-    "client": "cd src1 && flutter run -d chrome",
+    "client": "cd src1 && flutter run -d chrome --web-port 3001",
     "build": "node build-check.js",
     "build:flutter": "cd src1 && flutter build web",
     "clean": "cd src1 && flutter clean"
