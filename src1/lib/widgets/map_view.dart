@@ -1,3 +1,4 @@
+// lib/widgets/map_view.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -74,6 +75,56 @@ class _MapViewState extends State<MapView> {
     }
   }
 
+  /// 💡 그라데이션/캐릭터가 '고정'될 지도 좌표(선택 알림 없으면 한국 중심)
+  LatLng _anchorLatLng = const LatLng(36.5, 127.5);
+
+  /// 화면상의 중심 픽셀 위치 & 반경(px)
+  Offset? _anchorPx;
+  double _radiusPx = 200;         // 그라데이션 반경(px)
+  double _currentZoom = 7.0;
+
+  /// 원하는 실제 반경(미터) – 지도의 줌에 따라 픽셀반경으로 환산
+  double _desiredRadiusMeters = 120000; // 120km
+
+  /// 캐릭터(피그마 SVG) 배치 설정
+  final List<_CharacterCfg> _chars = const [
+    // 빨강(좌상)
+    _CharacterCfg(
+      asset: 'assets/svg/satellite_red.svg',
+      angleDeg: 150,     // 중심기준 각도
+      rotateDeg: -10,    // 자체 기울기
+      scale: 1.00,
+    ),
+    // 노랑(우상)
+    _CharacterCfg(
+      asset: 'assets/svg/satellite_yellow.svg',
+      angleDeg: 30,
+      rotateDeg: 12,
+      scale: 1.00,
+    ),
+    // 주황(좌하)
+    _CharacterCfg(
+      asset: 'assets/svg/satellite_orange.svg',
+      angleDeg: 250,
+      rotateDeg: -18,
+      scale: 1.00,
+    ),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.selectedAlert != null) {
+      _anchorLatLng = LatLng(
+        widget.selectedAlert!.location[0],
+        widget.selectedAlert!.location[1],
+      );
+    } else if (widget.alerts.isNotEmpty) {
+      final a = widget.alerts.first;
+      _anchorLatLng = LatLng(a.location[0], a.location[1]);
+    }
+  }
+
   @override
   void didUpdateWidget(MapView oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -117,12 +168,14 @@ class _MapViewState extends State<MapView> {
     }
   }
 
+  /// LatLng → 화면 픽셀로 변환 + 반경(px) 계산
   Future<void> _updateAnchorPx() async {
     if (_mapController == null) return;
     try {
       final sc = await _mapController!.getScreenCoordinate(_anchorLatLng);
       final offset = Offset(sc.x.toDouble(), sc.y.toDouble());
 
+      // meters-per-pixel (Google 지도 표면 분해능 근사)
       final metersPerPixel =
           156543.03392 *
               math.cos(_anchorLatLng.latitude * math.pi / 180.0) /
@@ -135,6 +188,7 @@ class _MapViewState extends State<MapView> {
         _radiusPx = rPx.toDouble();
       });
     } catch (_) {
+      // 컨트롤러 준비 전 등은 무시
     }
   }
 
@@ -152,9 +206,9 @@ class _MapViewState extends State<MapView> {
           },
           onCameraMove: (pos) {
             _currentZoom = pos.zoom;
-            _updateAnchorPx(); 
+            _updateAnchorPx(); // 🔄 이동 중에도 즉시 갱신
           },
-          onCameraIdle: _updateAnchorPx, 
+          onCameraIdle: _updateAnchorPx, // 관성 끝나면 한 번 더
           circles: widget.alerts.map((alert) {
             final color = _getMarkerColor(alert.risk);
             return Circle(
@@ -171,11 +225,13 @@ class _MapViewState extends State<MapView> {
           mapToolbarEnabled: false,
         ),
 
+        /// 🌈 그라데이션 + SVG 캐릭터(삼각형 배치) 오버레이
         Positioned.fill(
           child: IgnorePointer(
             ignoring: true,
             child: Stack(
               children: [
+                // 1) 라디얼 그라데이션 (앵커 기준)
                 if (_anchorPx != null)
                   CustomPaint(
                     painter: _AnchoredGradientPainter(
@@ -184,12 +240,14 @@ class _MapViewState extends State<MapView> {
                     ),
                   ),
 
+                // 2) SVG 캐릭터 3개 (앵커 기준 원 궤도에 배치)
                 if (_anchorPx != null) ..._buildCharacterWidgets(),
               ],
             ),
           ),
         ),
 
+        // ===== (기존) 모드 버튼 / 날짜 바 등 UI는 그대로 =====
         Positioned(
           top: 16,
           right: 16,
@@ -311,14 +369,18 @@ class _MapViewState extends State<MapView> {
     );
   }
 
+  /// SVG 캐릭터들을 화면 픽셀 좌표로 배치
   List<Widget> _buildCharacterWidgets() {
     final center = _anchorPx!;
     final r = _radiusPx;
 
-    final groupBiasY = -r * 0.06; 
+    // 캐릭터 집합의 중심을 약간 위로(스크린샷 느낌)
+    final groupBiasY = -r * 0.06; // ↑ 위로 올림 (비율로 조정)
 
-    final baseSize = r * 0.42; 
+    // 캐릭터 크기(픽셀). 반경 비율로 자연스럽게 스케일
+    final baseSize = r * 0.42; // 필요하면 0.36~0.48 사이에서 미세조정
 
+    // 궤도 반경(삼각형 배치 거리)
     final orbit = r * 0.33;
 
     Offset posFromAngle(double deg) {
@@ -351,6 +413,7 @@ class _MapViewState extends State<MapView> {
   }
 }
 
+/// 🌈 지도 픽셀 좌표에 고정되는 라디얼 그라데이션
 class _AnchoredGradientPainter extends CustomPainter {
   final Offset centerPx;
   final double radiusPx;
@@ -364,9 +427,9 @@ class _AnchoredGradientPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final gradient = const RadialGradient(
       colors: [
-        Color(0xCCFF5252),
-        Color(0xAAFFDB10),
-        Color(0x883CD1FF), 
+        Color(0xCCFF5252), // 빨강(안쪽)
+        Color(0xAAFFDB10), // 노랑
+        Color(0x883CD1FF), // 하늘(바깥)
       ],
       stops: [0.0, 0.5, 1.0],
     ).createShader(Rect.fromCircle(center: centerPx, radius: radiusPx));
@@ -383,11 +446,12 @@ class _AnchoredGradientPainter extends CustomPainter {
       old.centerPx != centerPx || old.radiusPx != radiusPx;
 }
 
+/// 캐릭터 배치 설정
 class _CharacterCfg {
   final String asset;
-  final double angleDeg;   
-  final double rotateDeg;  
-  final double scale;      
+  final double angleDeg;   // 중심 기준 각도
+  final double rotateDeg;  // 자체 회전
+  final double scale;      // 크기 보정
   const _CharacterCfg({
     required this.asset,
     required this.angleDeg,
