@@ -30,8 +30,8 @@ class MapView extends StatefulWidget {
 
 class _MapViewState extends State<MapView> {
   GoogleMapController? _mapController;
-
-  LatLng _anchorLatLng = const LatLng(36.5, 127.5);
+// change map center to earthexplorer lat lon values
+  LatLng _anchorLatLng = const LatLng(42, -96);
 
   Offset? _anchorPx;
   double _radiusPx = 200; 
