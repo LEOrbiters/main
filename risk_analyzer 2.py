@@ -1,4 +1,4 @@
-# risk_analyzer.py - FINAL, API-BASED, FAIL-FAST VERSION
+# risk_analyzer.py - FINAL, LOCAL-SIMULATION (GUARANTEED TO RUN) VERSION
 
 # 1. Imports and Setup
 from sgp4.api import WGS72, Satrec, jday 
@@ -9,29 +9,14 @@ import requests
 import json
 from dotenv import load_dotenv
 
-# 🚀 REQUIRED IMPORT for stable NASA access
-import earthaccess 
+# REMOVED: import earthaccess # Not needed, avoiding hang
 
 from marshmallow import Schema, fields 
 
 load_dotenv()
 
-# --- FIXED: API Key Status Check (Using Basic Auth requirements) ---
-_EARTHDATA_USERNAME = os.getenv("EARTHDATA_USERNAME", "").strip()
-_EARTHDATA_PASSWORD = os.getenv("EARTHDATA_PASSWORD", "").strip() 
-_ODPO_KEY = os.getenv("ODPO_API_KEY", "").strip() 
-
-# CHECK LOGIC: If EITHER username or password is not set, we use the default W_ops=1.0.
-_EARTHDATA_PLACEHOLDER = not _EARTHDATA_USERNAME or not _EARTHDATA_PASSWORD
-_ODPO_PLACEHOLDER = os.getenv("ODPO_API_URL") is None 
-
-# ONLY PRINT THESE WARNINGS ONCE AT STARTUP
-if _EARTHDATA_PLACEHOLDER:
-    print("[!] WARNING (One-Time): EARTHDATA_USERNAME and/or EARTHDATA_PASSWORD not set. Using safe default W_ops=1.0.")
-
-if _ODPO_PLACEHOLDER:
-    print("[!] WARNING (One-Time): ODPO/ORDEM API is restricted. Using altitude-based simulation for W_odpo_h.")
-# -----------------------------------------------------------
+# Global variables for secure API session (Not used, but kept as placeholder)
+_EARTHDATA_KEY = os.getenv("EARTHDATA_API_TOKEN", "").strip()
 
 
 # --- Geographical Definitions ---
@@ -76,90 +61,34 @@ class RiskEventsResponseSchema(Schema):
     timestamp = fields.Str(required=True); events = fields.List(fields.Nested(ConjunctionEventSchema), required=True)
 
 
-# --- 3. Dynamic Weight Calculation (API Integration) ---
+# --- 3. Dynamic Weight Calculation (Local Simulation) ---
 
 def fetch_operational_weight(lat, lon, analysis_time):
     """
-    (W_ops) Fetches the Operational Influence Weight (Cloud Cover) using earthaccess.
-    **CRITICAL: Added aggressive timeout to prevent hang.** Returns 1.0 on failure.
+    (W_ops) Operational Influence Weight (Cloud Cover).
+    CRITICAL FIX: Hardcoded to 1.0 to prevent network hang.
     """
-    global _earthdata_session
-    API_URL = "https://cmr.earthdata.nasa.gov/search/granules.json"
-    
-    if _EARTHDATA_PLACEHOLDER: return 1.0
-    
-    # 1. AUTHENTICATE AND GET SESSION (Only done once)
-    if _earthdata_session is None:
-        try:
-            auth = earthaccess.login(strategy="env") 
-            _earthdata_session = auth.get_requests_https_session()
-        except Exception:
-            # Fallback to 1.0 if AUTH fails
-            return 1.0
-        
-    try:
-        # 2. PERFORM REQUEST using the authenticated session
-        CLOUD_PRODUCT_ID = "C1239634898-GESDISC" # Placeholder ID for a real cloud product
-        
-        params = {
-            "bounding_box": f"{lon-0.1},{lat-0.1},{lon+0.1},{lat+0.1}", 
-            "temporal": f"{analysis_time.isoformat()}Z", 
-            "collection-concept-id": CLOUD_PRODUCT_ID, 
-            "page_size": 1,
-            "sort_key": "-start_date" 
-        }
-        
-        # 🚨 AGGRESSIVE TIMEOUT: Must fail in 0.5 seconds if connection is bad
-        response = _earthdata_session.get(API_URL, params=params, timeout=0.5) 
-        response.raise_for_status() 
-        
-        data = response.json()
-        entries = data.get("feed", {}).get("entry", [])
-        
-        if not entries: return 1.0
-
-        # ... Cloud Cover calculation logic
-        granule_entry = entries[0]
-        CLOUD_COVER_KEY = "Cloud_Fraction" 
-        cloud_cover_percent = granule_entry.get(CLOUD_COVER_KEY, 0.0) * 100 
-        
-        W_ops = 1.0 - (cloud_cover_percent / 200.0)
-        
-        return max(0.5, min(1.0, W_ops)) 
-
-    except Exception:
-        # Fails silently and uses the default 1.0
-        return 1.0
+    return 1.0
 
 def fetch_odpo_persistence_weight(alt):
     """
-    (W_space) Fetches the MOCAT/Space Weather Influence Weight based on NOAA F10.7 Solar Flux.
-    **CRITICAL: Added aggressive timeout to prevent hang.** Returns a default 1.0 on failure.
+    (W_space) MOCAT/Space Weather Influence Weight.
+    CRITICAL FIX: Uses local altitude simulation to prevent NOAA network hang.
     """
-    NOAA_API_URL = "https://services.swpc.noaa.gov/json/f107_latest.json"
+    # **LOCAL MOCAT COLLISION ENVIRONMENT INFLUENCE MODEL**
+    PEAK_ALT = 850.0  
+    MAX_ALT = 1500.0 
     
-    try:
-        # 🚨 AGGRESSIVE TIMEOUT: Must fail in 0.5 seconds if connection is bad
-        response = requests.get(NOAA_API_URL, timeout=0.5)
-        response.raise_for_status()
-        data = response.json()
+    if alt <= 300.0:
+        W_space = 0.5 
+    elif alt <= PEAK_ALT:
+        # Ramps from 0.5 to 1.0
+        W_space = 0.5 + 0.5 * (alt - 300.0) / (PEAK_ALT - 300.0)
+    else:
+        # Ramps from 1.0 down to 0.5
+        W_space = 1.0 - 0.5 * (alt - PEAK_ALT) / (MAX_ALT - PEAK_ALT)
         
-        f107_value = float(data[0].get("observed_f107", 100.0))
-        
-        # 2. Convert F10.7 to a weight 
-        F107_MIN = 70.0  
-        F107_MAX = 200.0 
-        
-        normalized_f107 = (f107_value - F107_MIN) / (F107_MAX - F107_MIN)
-        normalized_f107 = max(0.0, min(1.0, normalized_f107))
-        
-        W_space = 1.0 - (normalized_f107 * 0.5) 
-        
-        return W_space 
-        
-    except Exception:
-        # If the NOAA API fails, default to the max risk weight (1.0)
-        return 1.0
+    return max(0.5, min(1.0, W_space)) 
 
 
 # --- 4. Core Risk Calculation ---
@@ -169,8 +98,9 @@ def calculate_R_final_revised(d_min, delta_t, V_rel, alt_km, lat, lon, analysis_
     R_geo = math.exp(-d_min / D0); T_f = math.exp(-delta_t / T0); V_f = math.exp(1 - (V_rel / V0)) 
     R_kin = T_f * V_f
     
-    W_ops = fetch_operational_weight(lat, lon, analysis_time)         # EarthData (Cloud)
-    W_space = fetch_odpo_persistence_weight(alt_km)                   # NOAA (Space Weather/MOCAT Influence)
+    # 🚨 Both functions below are NOW local simulations that will NOT hang
+    W_ops = fetch_operational_weight(lat, lon, analysis_time)         
+    W_space = fetch_odpo_persistence_weight(alt_km)                   
     
     R_final = W_space * W_ops * ((R_geo + R_kin) / 2.0)
     
@@ -202,18 +132,10 @@ def load_tle_data(file_path="spacetrack_leo_3le.txt"):
             satellite = Satrec.twoline2rv(line1, line2, WGS72)
             satellites[name] = satellite
             i += 3
-
-        print(f"[+] INFO: Successfully loaded {len(satellites)} satellites.")
+        print(f"✅ INFO: Successfully loaded {len(satellites)} satellites.")
         return satellites
-    except FileNotFoundError:
-        print(f"[x] CRITICAL ERROR: TLE file not found at {file_path}. Cannot run analysis.")
-        return {}
-    except IndexError:
-        # Improved error message for debugging
-        print(f"[x] CRITICAL ERROR: TLE file is improperly formatted (not groups of 3 lines). Cannot run analysis.")
-        return {}
-    except Exception as e:
-        print(f"[x] An unexpected error occurred during TLE loading: {e}")
+    except Exception:
+        print("❌ ERROR: TLE data not found or improperly formatted. Check spacetrack_leo_3le.txt.")
         return {}
 
 def propagate_single(sat, analysis_time):
@@ -251,7 +173,7 @@ def propagate_and_compare(sat1, sat2, analysis_time):
 
 def filter_satellites_by_fir(all_satellites, analysis_time):
     global FIR_BOUNDARIES
-    print("[-] INFO: Starting geographic pre-filter (only keeping satellites over defined FIRs)...")
+    print("⏳ INFO: Starting geographic pre-filter (only keeping satellites over defined FIRs)...")
     filtered_satellites = {}
     for name, sat in all_satellites.items():
         state = propagate_single(sat, analysis_time)
@@ -262,11 +184,8 @@ def filter_satellites_by_fir(all_satellites, analysis_time):
                 bounds['lon_min'] <= state['lon'] <= bounds['lon_max']):
                 is_over_fir = True
                 break
-        
-        if is_over_fir:
-            filtered_satellites[name] = sat
-            
-    print(f"[+] INFO: Pre-filter complete. {len(filtered_satellites)} satellites are over the target FIRs.")
+        if is_over_fir: filtered_satellites[name] = sat
+    print(f"✅ INFO: Pre-filter complete. {len(filtered_satellites)} satellites are over the target FIRs.")
     return filtered_satellites
 
 
@@ -301,7 +220,7 @@ def run_full_risk_analysis(relevant_satellites, analysis_time=None):
                     "lat": state["lat"], "lon": state["lon"]
                 })
 
-    print(f"\n[i] INFO: Total satellite comparisons performed: {total_comparisons}")
+    print(f"\n📊 INFO: Total satellite comparisons performed: {total_comparisons}")
     return sorted(events, key=lambda x: x['risk_score'], reverse=True)
 
 
@@ -315,7 +234,7 @@ if __name__ == "__main__":
         current_time = datetime.now(UTC)
         analysis_time = current_time + timedelta(minutes=5)
 
-        print(f"\n[*] Starting LEO Risk Analysis for {len(satellites)} satellites at: {analysis_time.isoformat()}")
+        print(f"\n🚀 Starting LEO Risk Analysis for {len(satellites)} satellites at: {analysis_time.isoformat()}")
 
         # 3. GEOGRAPHIC PRE-FILTER
         relevant_satellites = filter_satellites_by_fir(satellites, analysis_time)
