@@ -55,6 +55,7 @@ src1/lib/generated_plugin_registrant.dart
 # Sensitive files
 src1/key.properties
 src1/local.properties
+.env
 
 # Android-specific
 src1/android/app/src/main/assets/flutter_assets/
