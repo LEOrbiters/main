@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"node src1/server.js\" \"npm run client\"",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "python server.py",
     "client": "cd src1 && flutter run -d chrome --web-port 3001",
     "build": "npm run build:flutter",

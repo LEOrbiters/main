@@ -37,52 +37,9 @@ class MapView extends StatefulWidget {
 
 class _MapViewState extends State<MapView> {
   GoogleMapController? _mapController;
-// change map center to earthexplorer lat lon values
+
+  /// 💡 그라데이션/캐릭터가 '고정'될 지도 좌표(선택 알림 없으면 earthexplorer 미국 좌표)
   LatLng _anchorLatLng = const LatLng(42, -96);
-
-  Offset? _anchorPx;
-  double _radiusPx = 200; 
-  double _currentZoom = 7.0;
-
-  double _desiredRadiusMeters = 120000; 
-
-  final List<_CharacterCfg> _chars = const [
-    _CharacterCfg(
-      asset: 'assets/svg/satellite_red.svg',
-      angleDeg: 150, 
-      rotateDeg: -10,
-      scale: 1.00,
-    ),
-    _CharacterCfg(
-      asset: 'assets/svg/satellite_yellow.svg',
-      angleDeg: 30,
-      rotateDeg: 12,
-      scale: 1.00,
-    ),
-    _CharacterCfg(
-      asset: 'assets/svg/satellite_orange.svg',
-      angleDeg: 250,
-      rotateDeg: -18,
-      scale: 1.00,
-    ),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.selectedAlert != null) {
-      _anchorLatLng = LatLng(
-        widget.selectedAlert!.location[0],
-        widget.selectedAlert!.location[1],
-      );
-    } else if (widget.alerts.isNotEmpty) {
-      final a = widget.alerts.first;
-      _anchorLatLng = LatLng(a.location[0], a.location[1]);
-    }
-  }
-
-  /// 💡 그라데이션/캐릭터가 '고정'될 지도 좌표(선택 알림 없으면 한국 중심)
-  LatLng _anchorLatLng = const LatLng(36.5, 127.5);
 
   /// 화면상의 중심 픽셀 위치 & 반경(px)
   Offset? _anchorPx;
