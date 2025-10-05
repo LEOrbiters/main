@@ -13,13 +13,28 @@ import 'widgets/onboarding_screen.dart'; // ✅ 추가
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ 환경 변수 로드
-  await dotenv.load(fileName: "assets/.env");
+  await dotenv.load(fileName: '.env');
 
-  // ✅ Google Maps JS 로드
+  if (kIsWeb) {
+    final key = dotenv.env['GOOGLE_MAPS_API_KEY'];
+    await _ensureGoogleMapsScriptLoaded(key);
+  }
+
+  runApp(const MyApp());
+}
+
+Future<void> _ensureGoogleMapsScriptLoaded(String? apiKey) async {
+  if (apiKey == null || apiKey.isEmpty) {
+    debugPrint('[Maps] GOOGLE_MAPS_API_KEY 누락 — 스크립트 주입을 건너뜁니다.');
+    return;
+  }
+
+  const scriptId = 'gmaps-js-sdk';
+  if (html.document.getElementById(scriptId) != null) return;
+
   final completer = Completer<void>();
-  final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
   final script = html.ScriptElement()
+    ..id = scriptId
     ..src = 'https://maps.googleapis.com/maps/api/js?key=$apiKey'
     ..async = true
     ..defer = true;
