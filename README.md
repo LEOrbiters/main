@@ -21,13 +21,13 @@ traffic
 
 ## Install required packages
 python3 -m pip install -r requirements.txt
-OR npm run require <!-- this is for python pip>
+OR npm run require <!-- this is for python pip-->
 
 ## anaconda setup
 1. download anaconda for operating system (Linux, Windows, Mac,...)
 2. open anaconda promt or .sh bash shell
 3. conda create -n traffic -c conda-forge python=3.10 traffic
-4. conda activate traffic <!-- repeat as many times as traffic needs to be setup>
+4. conda activate traffic <!-- repeat as many times as traffic needs to be setup-->
 5.(optional) 
 ### -n option is followed by the name of the environment
 conda update -n traffic -c conda-forge traffic
