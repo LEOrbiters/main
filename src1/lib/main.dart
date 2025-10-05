@@ -1,33 +1,58 @@
 import 'dart:async';
 import 'dart:html' as html;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 import 'models/alert.dart';
 import 'services/api_service.dart';
 import 'widgets/left_panel.dart';
 import 'widgets/map_view.dart';
+import 'widgets/onboarding_screen.dart'; // ✅ 추가
 
 Future<void> main() async {
-  // Ensure Flutter bindings are initialized
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables from the assets folder
-  await dotenv.load(fileName: "assets/.env");
-  // print the Google Maps API key for debugging
-  print(dotenv.env['GOOGLE_MAPS_API_KEY']);
-  // Dynamically inject the Google Maps script tag into the HTML head
+  await dotenv.load(fileName: '.env');
+
+  if (kIsWeb) {
+    final key = dotenv.env['GOOGLE_MAPS_API_KEY'];
+    await _ensureGoogleMapsScriptLoaded(key);
+  }
+
+  runApp(const MyApp());
+}
+
+Future<void> _ensureGoogleMapsScriptLoaded(String? apiKey) async {
+  if (apiKey == null || apiKey.isEmpty) {
+    debugPrint('[Maps] GOOGLE_MAPS_API_KEY 누락 — 스크립트 주입을 건너뜁니다.');
+    return;
+  }
+
+  const scriptId = 'gmaps-js-sdk';
+  if (html.document.getElementById(scriptId) != null) return;
+
   final completer = Completer<void>();
-  final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
   final script = html.ScriptElement()
+    ..id = scriptId
     ..src = 'https://maps.googleapis.com/maps/api/js?key=$apiKey'
     ..async = true
     ..defer = true;
 
   script.onLoad.listen((_) => completer.complete());
-  script.onError.listen((_) => completer.completeError('Failed to load Google Maps script.'));
-
+  script.onError.listen(
+      (_) => completer.completeError('Failed to load Google Maps script.'));
   html.document.head?.append(script);
   await completer.future;
+
+  // ✅ 실행 시 URL이 비어 있으면 #/onboarding으로 변경
+  if (kIsWeb) {
+    final currentHash = html.window.location.hash;
+    if (currentHash.isEmpty || currentHash == '#/' || currentHash == '') {
+      html.window.location.hash = '#/onboarding';
+    }
+  }
+
   runApp(const MyApp());
 }
 
@@ -42,7 +67,12 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const HomePage(),
+      // ✅ 라우트 기반 설정
+      initialRoute: '/onboarding', // ← 시작 페이지를 온보딩으로 지정
+      routes: {
+        '/': (context) => const HomePage(), // 지도 화면
+        '/onboarding': (context) => const OnboardingScreen(), // 온보딩 화면
+      },
       debugShowCheckedModeBanner: false,
     );
   }

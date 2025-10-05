@@ -16,12 +16,21 @@ from marshmallow import Schema, fields
 
 load_dotenv()
 
-# Global variables for secure API session (to prevent re-authentication)
-_earthdata_session = None
-_EARTHDATA_KEY = os.getenv("EARTHDATA_API_TOKEN", "").strip()
+# --- FIXED: API Key Status Check (Using Basic Auth requirements) ---
+_EARTHDATA_USERNAME = os.getenv("EARTHDATA_USERNAME", "").strip()
+_EARTHDATA_PASSWORD = os.getenv("EARTHDATA_PASSWORD", "").strip() 
+_ODPO_KEY = os.getenv("ODPO_API_KEY", "").strip() 
 
-# --- Placeholder Checks ---
-_EARTHDATA_PLACEHOLDER = not _EARTHDATA_KEY
+# CHECK LOGIC: If EITHER username or password is not set, we use the default W_ops=1.0.
+_EARTHDATA_PLACEHOLDER = not _EARTHDATA_USERNAME or not _EARTHDATA_PASSWORD
+_ODPO_PLACEHOLDER = os.getenv("ODPO_API_URL") is None 
+
+# ONLY PRINT THESE WARNINGS ONCE AT STARTUP
+if _EARTHDATA_PLACEHOLDER:
+    print("[!] WARNING (One-Time): EARTHDATA_USERNAME and/or EARTHDATA_PASSWORD not set. Using safe default W_ops=1.0.")
+
+if _ODPO_PLACEHOLDER:
+    print("[!] WARNING (One-Time): ODPO/ORDEM API is restricted. Using altitude-based simulation for W_odpo_h.")
 # -----------------------------------------------------------
 
 
@@ -193,10 +202,18 @@ def load_tle_data(file_path="spacetrack_leo_3le.txt"):
             satellite = Satrec.twoline2rv(line1, line2, WGS72)
             satellites[name] = satellite
             i += 3
-        print(f"✅ INFO: Successfully loaded {len(satellites)} satellites.")
+
+        print(f"[+] INFO: Successfully loaded {len(satellites)} satellites.")
         return satellites
-    except Exception:
-        print("❌ ERROR: TLE data not found or improperly formatted. Check spacetrack_leo_3le.txt.")
+    except FileNotFoundError:
+        print(f"[x] CRITICAL ERROR: TLE file not found at {file_path}. Cannot run analysis.")
+        return {}
+    except IndexError:
+        # Improved error message for debugging
+        print(f"[x] CRITICAL ERROR: TLE file is improperly formatted (not groups of 3 lines). Cannot run analysis.")
+        return {}
+    except Exception as e:
+        print(f"[x] An unexpected error occurred during TLE loading: {e}")
         return {}
 
 def propagate_single(sat, analysis_time):
@@ -234,7 +251,7 @@ def propagate_and_compare(sat1, sat2, analysis_time):
 
 def filter_satellites_by_fir(all_satellites, analysis_time):
     global FIR_BOUNDARIES
-    print("⏳ INFO: Starting geographic pre-filter (only keeping satellites over defined FIRs)...")
+    print("[-] INFO: Starting geographic pre-filter (only keeping satellites over defined FIRs)...")
     filtered_satellites = {}
     for name, sat in all_satellites.items():
         state = propagate_single(sat, analysis_time)
@@ -245,8 +262,11 @@ def filter_satellites_by_fir(all_satellites, analysis_time):
                 bounds['lon_min'] <= state['lon'] <= bounds['lon_max']):
                 is_over_fir = True
                 break
-        if is_over_fir: filtered_satellites[name] = sat
-    print(f"✅ INFO: Pre-filter complete. {len(filtered_satellites)} satellites are over the target FIRs.")
+        
+        if is_over_fir:
+            filtered_satellites[name] = sat
+            
+    print(f"[+] INFO: Pre-filter complete. {len(filtered_satellites)} satellites are over the target FIRs.")
     return filtered_satellites
 
 
@@ -281,7 +301,7 @@ def run_full_risk_analysis(relevant_satellites, analysis_time=None):
                     "lat": state["lat"], "lon": state["lon"]
                 })
 
-    print(f"\n📊 INFO: Total satellite comparisons performed: {total_comparisons}")
+    print(f"\n[i] INFO: Total satellite comparisons performed: {total_comparisons}")
     return sorted(events, key=lambda x: x['risk_score'], reverse=True)
 
 
@@ -295,7 +315,7 @@ if __name__ == "__main__":
         current_time = datetime.now(UTC)
         analysis_time = current_time + timedelta(minutes=5)
 
-        print(f"\n🚀 Starting LEO Risk Analysis for {len(satellites)} satellites at: {analysis_time.isoformat()}")
+        print(f"\n[*] Starting LEO Risk Analysis for {len(satellites)} satellites at: {analysis_time.isoformat()}")
 
         # 3. GEOGRAPHIC PRE-FILTER
         relevant_satellites = filter_satellites_by_fir(satellites, analysis_time)
