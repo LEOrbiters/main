@@ -2,14 +2,20 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:flutter_svg/flutter_svg.dart';  
+import 'package:flutter_svg/flutter_svg.dart';
 import '../models/alert.dart';
+
+// ===== Date ribbon sizing (global constants) =====
+const double kRibbonHeight   = 64.0;  // 전체 바 높이
+const double kDateChipHeight = 40.0;  // 날짜 칩 높이
+const double kDateChipWidth  = 120.0; // 날짜 칩 가로 폭
+const double kDateChipGap    = 8.0;   // 칩 간격
 
 class MapView extends StatefulWidget {
   final List<Alert> alerts;
   final Alert? selectedAlert;
   final MapMode mapMode;
-  final Function(MapMode) onMapModeChange;
+  final void Function(MapMode) onMapModeChange;
   final String selectedDate;
   final Function(String) onDateChange;
   final List<String> availableDates;
@@ -80,36 +86,21 @@ class _MapViewState extends State<MapView> {
 
   /// 화면상의 중심 픽셀 위치 & 반경(px)
   Offset? _anchorPx;
-  double _radiusPx = 200;         // 그라데이션 반경(px)
+  double _radiusPx = 200;
   double _currentZoom = 7.0;
 
-  /// 원하는 실제 반경(미터) – 지도의 줌에 따라 픽셀반경으로 환산
+  /// 원하는 실제 반경(미터)
   double _desiredRadiusMeters = 120000; // 120km
 
   /// 캐릭터(피그마 SVG) 배치 설정
   final List<_CharacterCfg> _chars = const [
-    // 빨강(좌상)
-    _CharacterCfg(
-      asset: 'assets/svg/satellite_red.svg',
-      angleDeg: 150,     // 중심기준 각도
-      rotateDeg: -10,    // 자체 기울기
-      scale: 1.00,
-    ),
-    // 노랑(우상)
-    _CharacterCfg(
-      asset: 'assets/svg/satellite_yellow.svg',
-      angleDeg: 30,
-      rotateDeg: 12,
-      scale: 1.00,
-    ),
-    // 주황(좌하)
-    _CharacterCfg(
-      asset: 'assets/svg/satellite_orange.svg',
-      angleDeg: 250,
-      rotateDeg: -18,
-      scale: 1.00,
-    ),
+    _CharacterCfg(asset: 'assets/svg/satellite_red.svg',    angleDeg: 150, rotateDeg: -10, scale: 1.0),
+    _CharacterCfg(asset: 'assets/svg/satellite_yellow.svg', angleDeg: 30,  rotateDeg: 12,  scale: 1.0),
+    _CharacterCfg(asset: 'assets/svg/satellite_orange.svg', angleDeg: 250, rotateDeg: -18, scale: 1.0),
   ];
+
+  // 날짜 리본 스크롤 컨트롤러
+  final ScrollController _dateScroll = ScrollController();
 
   @override
   void initState() {
@@ -123,6 +114,7 @@ class _MapViewState extends State<MapView> {
       final a = widget.alerts.first;
       _anchorLatLng = LatLng(a.location[0], a.location[1]);
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _centerSelectedDate());
   }
 
   @override
@@ -136,6 +128,11 @@ class _MapViewState extends State<MapView> {
         widget.selectedAlert!.location[1],
       );
       _updateAnchorPx();
+    }
+
+    if (widget.selectedDate != oldWidget.selectedDate ||
+        widget.availableDates != oldWidget.availableDates) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _centerSelectedDate());
     }
   }
 
@@ -156,8 +153,7 @@ class _MapViewState extends State<MapView> {
     return const Color(0xFF22C55E);
   }
 
-  int get _currentDateIndex =>
-      widget.availableDates.indexOf(widget.selectedDate);
+  int get _currentDateIndex => widget.availableDates.indexOf(widget.selectedDate);
 
   void _handleDateChange(String direction) {
     final i = _currentDateIndex;
@@ -168,6 +164,25 @@ class _MapViewState extends State<MapView> {
     }
   }
 
+  // 현재 선택된 날짜칩을 가운데로 스크롤
+  void _centerSelectedDate() {
+    if (!_dateScroll.hasClients) return;
+    final i = _currentDateIndex;
+    if (i < 0) return;
+    final itemExtent = kDateChipWidth + kDateChipGap;
+    final viewportWidth = _dateScroll.position.viewportDimension;
+    final target = i * itemExtent - (viewportWidth - kDateChipWidth) / 2;
+
+    _dateScroll.animateTo(
+      target.clamp(
+        _dateScroll.position.minScrollExtent,
+        _dateScroll.position.maxScrollExtent,
+      ),
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
+    );
+  }
+
   /// LatLng → 화면 픽셀로 변환 + 반경(px) 계산
   Future<void> _updateAnchorPx() async {
     if (_mapController == null) return;
@@ -175,11 +190,9 @@ class _MapViewState extends State<MapView> {
       final sc = await _mapController!.getScreenCoordinate(_anchorLatLng);
       final offset = Offset(sc.x.toDouble(), sc.y.toDouble());
 
-      // meters-per-pixel (Google 지도 표면 분해능 근사)
-      final metersPerPixel =
-          156543.03392 *
-              math.cos(_anchorLatLng.latitude * math.pi / 180.0) /
-              math.pow(2, _currentZoom);
+      final metersPerPixel = 156543.03392 *
+          math.cos(_anchorLatLng.latitude * math.pi / 180.0) /
+          math.pow(2, _currentZoom);
 
       final rPx = _desiredRadiusMeters / metersPerPixel;
 
@@ -187,9 +200,7 @@ class _MapViewState extends State<MapView> {
         _anchorPx = offset;
         _radiusPx = rPx.toDouble();
       });
-    } catch (_) {
-      // 컨트롤러 준비 전 등은 무시
-    }
+    } catch (_) {}
   }
 
   @override
@@ -197,18 +208,17 @@ class _MapViewState extends State<MapView> {
     return Stack(
       children: [
         GoogleMap(
-          mapType:
-              widget.mapMode == MapMode.threeD ? MapType.satellite : MapType.normal,
+          mapType: widget.mapMode == MapMode.threeD ? MapType.satellite : MapType.normal,
           initialCameraPosition: CameraPosition(target: _anchorLatLng, zoom: 7.0),
-          onMapCreated: (GoogleMapController controller) async {
-            _mapController = controller;
+          onMapCreated: (c) async {
+            _mapController = c;
             await _updateAnchorPx();
           },
           onCameraMove: (pos) {
             _currentZoom = pos.zoom;
-            _updateAnchorPx(); // 🔄 이동 중에도 즉시 갱신
+            _updateAnchorPx();
           },
-          onCameraIdle: _updateAnchorPx, // 관성 끝나면 한 번 더
+          onCameraIdle: _updateAnchorPx,
           circles: widget.alerts.map((alert) {
             final color = _getMarkerColor(alert.risk);
             return Circle(
@@ -225,13 +235,12 @@ class _MapViewState extends State<MapView> {
           mapToolbarEnabled: false,
         ),
 
-        /// 🌈 그라데이션 + SVG 캐릭터(삼각형 배치) 오버레이
+        // 🌈 오버레이
         Positioned.fill(
           child: IgnorePointer(
             ignoring: true,
             child: Stack(
               children: [
-                // 1) 라디얼 그라데이션 (앵커 기준)
                 if (_anchorPx != null)
                   CustomPaint(
                     painter: _AnchoredGradientPainter(
@@ -239,15 +248,13 @@ class _MapViewState extends State<MapView> {
                       radiusPx: _radiusPx,
                     ),
                   ),
-
-                // 2) SVG 캐릭터 3개 (앵커 기준 원 궤도에 배치)
                 if (_anchorPx != null) ..._buildCharacterWidgets(),
               ],
             ),
           ),
         ),
 
-        // ===== (기존) 모드 버튼 / 날짜 바 등 UI는 그대로 =====
+        // 모드 전환 버튼
         Positioned(
           top: 16,
           right: 16,
@@ -276,8 +283,7 @@ class _MapViewState extends State<MapView> {
                           isSelected ? const Color(0xFF2563EB) : const Color(0xFFF3F4F6),
                       foregroundColor:
                           isSelected ? Colors.white : const Color(0xFF374151),
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(6),
@@ -293,74 +299,71 @@ class _MapViewState extends State<MapView> {
             ),
           ),
         ),
+
+        // ===== 날짜 리본 (가로 스크롤) =====
         Positioned(
           bottom: 16,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    onPressed: _currentDateIndex > 0
-                        ? () => _handleDateChange('prev')
-                        : null,
-                    icon: const Icon(Icons.chevron_left),
-                    style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFFF3F4F6),
-                      disabledBackgroundColor: const Color(0xFFF3F4F6),
+          left: 240,
+          right: 60,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1200),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      spreadRadius: 2,
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  ...widget.availableDates
-                      .sublist(
-                        _currentDateIndex > 0 ? _currentDateIndex - 1 : 0,
-                        (_currentDateIndex + 2).clamp(0, widget.availableDates.length),
-                      )
-                      .map((date) {
-                    final isSelected = date == widget.selectedDate;
-                    return Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFF3F4F6),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        date,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: isSelected ? Colors.white : const Color(0xFF374151),
-                        ),
-                      ),
-                    );
-                  }),
-                  const SizedBox(width: 16),
-                  IconButton(
-                    onPressed: _currentDateIndex < widget.availableDates.length - 1
-                        ? () => _handleDateChange('next')
-                        : null,
-                    icon: const Icon(Icons.chevron_right),
-                    style: IconButton.styleFrom(
-                      backgroundColor: const Color(0xFFF3F4F6),
-                      disabledBackgroundColor: const Color(0xFFF3F4F6),
+                  ],
+                ),
+                height: kRibbonHeight, // ← 슬림한 리본 높이
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    _RoundIconBtn(
+                      icon: Icons.chevron_left,
+                      onTap: _currentDateIndex > 0 ? () => _handleDateChange('prev') : null,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+
+                    Expanded(
+                      child: ListView.builder(
+                        controller: _dateScroll,
+                        scrollDirection: Axis.horizontal,
+                        physics: const ClampingScrollPhysics(),
+                        itemCount: widget.availableDates.length,
+                        itemBuilder: (context, index) {
+                          final date = widget.availableDates[index];
+                          final isSelected = date == widget.selectedDate;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: kDateChipGap, top: 6, bottom: 6,),
+                            child: _DateChip(
+                              width: kDateChipWidth,
+                              label: date,
+                              selected: isSelected,
+                              onTap: () {
+                                if (!isSelected) widget.onDateChange(date);
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(width: 8),
+                    _RoundIconBtn(
+                      icon: Icons.chevron_right,
+                      onTap: _currentDateIndex < widget.availableDates.length - 1
+                          ? () => _handleDateChange('next')
+                          : null,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -374,13 +377,8 @@ class _MapViewState extends State<MapView> {
     final center = _anchorPx!;
     final r = _radiusPx;
 
-    // 캐릭터 집합의 중심을 약간 위로(스크린샷 느낌)
-    final groupBiasY = -r * 0.06; // ↑ 위로 올림 (비율로 조정)
-
-    // 캐릭터 크기(픽셀). 반경 비율로 자연스럽게 스케일
-    final baseSize = r * 0.42; // 필요하면 0.36~0.48 사이에서 미세조정
-
-    // 궤도 반경(삼각형 배치 거리)
+    final groupBiasY = -r * 0.06;
+    final baseSize = r * 0.42;
     final orbit = r * 0.33;
 
     Offset posFromAngle(double deg) {
@@ -403,41 +401,27 @@ class _MapViewState extends State<MapView> {
         child: Transform.rotate(
           angle: c.rotateDeg * math.pi / 180,
           alignment: Alignment.center,
-          child: SvgPicture.asset(
-            c.asset,
-            fit: BoxFit.contain,
-          ),
+          child: SvgPicture.asset(c.asset, fit: BoxFit.contain),
         ),
       );
     }).toList();
   }
 }
 
-/// 🌈 지도 픽셀 좌표에 고정되는 라디얼 그라데이션
 class _AnchoredGradientPainter extends CustomPainter {
   final Offset centerPx;
   final double radiusPx;
 
-  const _AnchoredGradientPainter({
-    required this.centerPx,
-    required this.radiusPx,
-  });
+  const _AnchoredGradientPainter({required this.centerPx, required this.radiusPx});
 
   @override
   void paint(Canvas canvas, Size size) {
     final gradient = const RadialGradient(
-      colors: [
-        Color(0xCCFF5252), // 빨강(안쪽)
-        Color(0xAAFFDB10), // 노랑
-        Color(0x883CD1FF), // 하늘(바깥)
-      ],
+      colors: [Color(0xCCFF5252), Color(0xAAFFDB10), Color(0x883CD1FF)],
       stops: [0.0, 0.5, 1.0],
     ).createShader(Rect.fromCircle(center: centerPx, radius: radiusPx));
 
-    final paint = Paint()
-      ..shader = gradient
-      ..isAntiAlias = true;
-
+    final paint = Paint()..shader = gradient..isAntiAlias = true;
     canvas.drawCircle(centerPx, radiusPx, paint);
   }
 
@@ -446,16 +430,86 @@ class _AnchoredGradientPainter extends CustomPainter {
       old.centerPx != centerPx || old.radiusPx != radiusPx;
 }
 
-/// 캐릭터 배치 설정
 class _CharacterCfg {
   final String asset;
-  final double angleDeg;   // 중심 기준 각도
-  final double rotateDeg;  // 자체 회전
-  final double scale;      // 크기 보정
+  final double angleDeg;
+  final double rotateDeg;
+  final double scale;
   const _CharacterCfg({
     required this.asset,
     required this.angleDeg,
     this.rotateDeg = 0,
     this.scale = 1.0,
   });
+}
+
+class _RoundIconBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  const _RoundIconBtn({required this.icon, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: const BoxDecoration(
+          color: Color(0xFFF3F4F6),
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          icon,
+          color: enabled ? const Color(0xFF6B7280) : const Color(0xFFBFC5CF),
+          size: 26,
+        ),
+      ),
+    );
+  }
+}
+
+class _DateChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final double width;
+
+  const _DateChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    required this.width,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: kDateChipHeight, // ← 슬림한 칩 높이
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF2563EB) : const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0), // 세로 여백 최소화
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : const Color(0xFF374151),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
