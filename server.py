@@ -1,5 +1,3 @@
-# REVISED VERSION - Implements API, Swagger, and Forecasting
-
 from flask import Flask, jsonify
 from dotenv import load_dotenv
 import os
