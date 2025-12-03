@@ -1,6 +1,9 @@
 # FIR 공역 기반 LEO 위성 충돌 조기예보 및 시각화 시스템
 
 # FIR-Based LEO Satellite Collision Early-Warning and Visualization System
+Canva Presentation:
+
+[![프레젠테이션](https://github.com/user-attachments/assets/ab616d2b-2dd8-4f2d-a86a-1747fefb312b)](https://www.canva.com/design/DAG6bbQGUkk/zWS06JmgrcHJ0dajRrDAyQ/edit?utm_content=DAG6bbQGUkk&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton)
 
 ## 클라이언트 사이드 Flutter 실행
 cd src1
