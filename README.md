@@ -11,10 +11,6 @@ flutter pub get
 ### Google Map API key: src1/assets/.env REQUIRED
 
 ## 서버 사이드 Python Flask 실행:
-### Add to requirements.txt (keep editing)
-numpy==1.24.0 sgp4==2.22 python-dateutil==2.8.2 request traffic
-
-# 서버 사이드 Python Flask 실행:
 ## Add to requirements.txt (keep editing)
 numpy==1.24.0 
 sgp4==2.22 
